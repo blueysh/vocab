@@ -400,7 +400,7 @@ async function lookupWord(){
 Include 1-4 most common meanings. Korean must be natural. Reply with the JSON object only.`;
 
     const res=await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent?key=${apiKey}`,
       {method:'POST',headers:{'Content-Type':'application/json'},
        body:JSON.stringify({contents:[{parts:[{text:prompt}]}],
          generationConfig:{temperature:0.1,maxOutputTokens:700}})}
@@ -424,7 +424,7 @@ Include 1-4 most common meanings. Korean must be natural. Reply with the JSON ob
     // 응답 바디도 보여주기 위해 재시도
     try{
       const res2=await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=${getApiKey()}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent?key=${getApiKey()}`,
         {method:'POST',headers:{'Content-Type':'application/json'},
          body:JSON.stringify({contents:[{parts:[{text:'hi'}]}]})}
       );
