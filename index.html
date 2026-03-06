@@ -411,7 +411,28 @@ Include 1-4 most common meanings. Korean must be natural. Reply with the JSON ob
     lookupData=parsed.senses||[];
     renderLookup(parsed);
   }catch(e){
-    toast('조회 실패 — 직접 입력해주세요','ng');
+    const msg=e?.message||String(e);
+    toast('조회 실패: '+msg,'ng');
+    // 에러 상세를 카드에도 표시
+    const card=document.getElementById('lookupCard');
+    card.innerHTML=`<div style="font-size:12px;color:var(--red);line-height:1.7;word-break:break-all">
+      <b>에러 상세</b><br>${msg}<br><br>
+      <span style="color:var(--text3)">API 응답이 있으면:</span><br>
+      <span id="errRaw"></span>
+    </div>`;
+    card.style.display='block';
+    // 응답 바디도 보여주기 위해 재시도
+    try{
+      const res2=await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${getApiKey()}`,
+        {method:'POST',headers:{'Content-Type':'application/json'},
+         body:JSON.stringify({contents:[{parts:[{text:'hi'}]}]})}
+      );
+      const txt=await res2.text();
+      document.getElementById('errRaw').textContent=txt.slice(0,300);
+    }catch(e2){
+      document.getElementById('errRaw').textContent='네트워크 연결 실패: '+e2.message;
+    }
     document.getElementById('sMean').focus();
   }finally{btn.disabled=false;sp.style.display='none';}
 }
