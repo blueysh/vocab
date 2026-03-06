@@ -114,10 +114,7 @@
   .q-dir{font-size:11px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;}
   .q-pos{font-size:12px;color:var(--accent);background:rgba(124,106,247,.1);border:1px solid rgba(124,106,247,.2);border-radius:5px;padding:2px 9px;}
   .q-word{font-family:'DM Serif Display',serif;font-size:44px;line-height:1.15;}
-  .judging{display:none;align-items:center;gap:8px;font-size:13px;color:var(--text3);margin-bottom:12px;justify-content:center;}
-  .judging.show{display:flex;}
-  .spin{width:13px;height:13px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0;}
-  @keyframes spin{to{transform:rotate(360deg)}}
+
 
   /* answer reveal */
   .ans-reveal{background:var(--bg3);border-radius:10px;padding:13px 16px;margin-bottom:12px;display:none;line-height:1.8;}
@@ -161,6 +158,7 @@
   <button class="tab active" onclick="go('add')">추가</button>
   <button class="tab" onclick="go('list')">단어장 <span class="badge" id="badge">0</span></button>
   <button class="tab" onclick="go('review')">복습</button>
+  <button class="tab" onclick="go('cfg')" id="tabCfg">⚙</button>
 </div>
 
 <!-- ══ ADD ══ -->
@@ -275,7 +273,7 @@
       <div class="q-pos" id="qPos" style="display:none"></div>
       <div class="q-word" id="qWord"></div>
     </div>
-    <div class="judging" id="judging"><div class="spin"></div>AI 판정 중…</div>
+
     <div class="ans-reveal" id="ansReveal"></div>
     <div class="q-input-wrap">
       <input class="q-input" id="qInput" placeholder="정답 입력" onkeydown="if(event.key==='Enter')checkAns()" autocomplete="off">
@@ -294,6 +292,28 @@
       <button class="btn-main" style="flex:none;padding:12px 28px" onclick="beginReview()">다시</button>
       <button class="btn-sub" onclick="showCfg()">설정</button>
     </div>
+  </div>
+</div>
+
+<!-- ══ CFG ══ -->
+<div class="page" id="page-cfg">
+  <div class="field">
+    <label>Anthropic API 키</label>
+    <div style="display:flex;gap:8px">
+      <input type="password" id="cfgApiKey" placeholder="sk-ant-..." autocomplete="off"
+        style="flex:1;background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:12px 14px;color:var(--text);font-family:'Pretendard',sans-serif;font-size:15px;outline:none;transition:border-color .15s;"
+        onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'"
+        onkeydown="if(event.key==='Enter')saveApiKey()">
+      <button class="btn-small" onclick="toggleKeyVis()">👁</button>
+    </div>
+    <div style="font-size:11px;color:var(--text3);margin-top:6px;line-height:1.7">
+      키는 이 기기의 브라우저에만 저장돼요 — 파일 안에 들어가지 않아요.<br>
+      무료 발급: <span style="color:var(--accent)">aistudio.google.com</span> → Get API key → Create API key
+    </div>
+  </div>
+  <div style="display:flex;gap:8px;align-items:center;margin-top:4px">
+    <button class="btn-primary" style="flex:none;padding:11px 24px;width:auto" onclick="saveApiKey()">저장</button>
+    <span id="cfgKeyStatus" style="font-size:13px;color:var(--text3)"></span>
   </div>
 </div>
 
@@ -322,15 +342,45 @@ function priority(w){
 }
 
 // ── TABS ──────────────────────────────────────────────────
+const PAGES=['add','list','review','cfg'];
 function go(id){
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
   document.getElementById('page-'+id).classList.add('active');
-  document.querySelectorAll('.tab')[['add','list','review'].indexOf(id)].classList.add('active');
+  document.querySelectorAll('.tab')[PAGES.indexOf(id)].classList.add('active');
   if(id==='list')renderList();
   if(id==='add')setTimeout(()=>document.getElementById('iWord').focus(),80);
+  if(id==='cfg')initCfgPage();
 }
 function refreshBadge(){document.getElementById('badge').textContent=load().length;}
+
+// ── API KEY ───────────────────────────────────────────────
+const AKEY='vocab_apikey';
+const getApiKey=()=>localStorage.getItem(AKEY)||'';
+function saveApiKey(){
+  const v=document.getElementById('cfgApiKey').value.trim();
+  if(!v){toast('키를 입력해주세요','ng');return;}
+  localStorage.setItem(AKEY,v);
+  updateKeyStatus();
+  toast('저장됨','ok');
+}
+function toggleKeyVis(){
+  const inp=document.getElementById('cfgApiKey');
+  inp.type=inp.type==='password'?'text':'password';
+}
+function initCfgPage(){
+  const k=getApiKey();
+  const inp=document.getElementById('cfgApiKey');
+  if(k) inp.value=k;
+  updateKeyStatus();
+}
+function updateKeyStatus(){
+  const k=getApiKey();
+  const el=document.getElementById('cfgKeyStatus');
+  if(!el)return;
+  el.textContent=k?'✓ 키 저장됨 ('+k.slice(0,12)+'…)':'키 없음 — AI 기능 비활성화';
+  el.style.color=k?'var(--green)':'var(--text3)';
+}
 
 // ── AI LOOKUP (단어 추가 시) ───────────────────────────────
 let lookupData=[];
@@ -338,24 +388,29 @@ let lookupData=[];
 async function lookupWord(){
   const word=document.getElementById('iWord').value.trim();
   if(!word)return;
+  const apiKey=getApiKey();
+  if(!apiKey){toast('⚙ 설정에서 API 키를 먼저 입력해주세요','ng');go('cfg');return;}
   const btn=document.getElementById('btnLookup'),sp=document.getElementById('lSpin');
   btn.disabled=true;sp.style.display='inline-block';
   document.getElementById('lookupCard').style.display='none';
 
   try{
-    const res=await fetch('https://api.anthropic.com/v1/messages',{
-      method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:700,
-        messages:[{role:'user',content:`Look up the English word "${word}" and return ONLY a raw JSON object (no markdown, no backticks):
-{"word":"${word}","phonetic":"IPA or empty","senses":[{"type":"n./v./adj./adv./prep./phr.","mean":"Korean meaning (use parentheses for optional parts like (운동)선수)","ex":"short English example"}]}
-Include 1-4 most common meanings. Korean should be natural. Reply with JSON only.`}]})
-    });
+    const prompt=`Look up the English word "${word}" and return ONLY a raw JSON object (no markdown, no backticks, no explanation):
+{"word":"${word}","phonetic":"IPA pronunciation or empty string","senses":[{"type":"n. or v. or adj. or adv. or prep. or phr.","mean":"Korean meaning — use parentheses for optional parts e.g. (운동)선수","ex":"one short natural English example sentence"}]}
+Include 1-4 most common meanings. Korean must be natural. Reply with the JSON object only.`;
+
+    const res=await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+      {method:'POST',headers:{'Content-Type':'application/json'},
+       body:JSON.stringify({contents:[{parts:[{text:prompt}]}],
+         generationConfig:{temperature:0.1,maxOutputTokens:700}})}
+    );
     const data=await res.json();
-    const raw=(data.content||[]).map(c=>c.text||'').join('').trim();
-    const parsed=JSON.parse(raw.replace(/^```json?|```$/g,'').trim());
+    const raw=(data.candidates?.[0]?.content?.parts?.[0]?.text||'').trim();
+    const parsed=JSON.parse(raw.replace(/^```json?|```$/gm,'').trim());
     lookupData=parsed.senses||[];
     renderLookup(parsed);
-  }catch{
+  }catch(e){
     toast('조회 실패 — 직접 입력해주세요','ng');
     document.getElementById('sMean').focus();
   }finally{btn.disabled=false;sp.style.display='none';}
@@ -494,7 +549,6 @@ function nextQ(){
   const inp=document.getElementById('qInput');
   inp.value='';inp.className='q-input';inp.disabled=false;inp.placeholder=enToKo?'한국어 뜻':'영단어';
   document.getElementById('ansReveal').style.display='none';
-  document.getElementById('judging').classList.remove('show');
   document.getElementById('btnCheck').textContent='확인';
   document.getElementById('progFill').style.width=(qi/queue.length*100)+'%';
   document.getElementById('progText').textContent=(qi+1)+' / '+queue.length;
@@ -502,59 +556,56 @@ function nextQ(){
   setTimeout(()=>inp.focus(),80);
 }
 
-// ── AI JUDGE ──────────────────────────────────────────────
-async function aiJudge(userAnswer,wordEntry,isEnToKo){
-  const allSenses=(wordEntry.senses||[]).map(s=>`${s.type?s.type+' ':''}"${s.mean}"`).join(', ');
-  const prompt=`You are a generous vocabulary quiz judge.
 
-Word: "${wordEntry.word}"
-All meanings: ${allSenses}
-Direction: ${isEnToKo?'English shown → user writes Korean meaning':'Korean shown → user writes English word'}
-User answered: "${userAnswer}"
-
-Korean rules (very lenient):
-- Accept if matches ANY registered meaning
-- "(운동)선수" → "운동선수","선수","운동 선수" all OK
-- Ignore spacing differences entirely
-- Ignore trailing particles (은/는/이/가/을/를/의/에/도/로/과/와)
-- Ignore ~에 대한, ~에 관한 type patterns; match core noun
-- Accept synonyms/partial matches of compound words
-- Reject only if completely unrelated
-
-English rules:
-- Accept exact or near-exact
-- Case/punctuation insensitive
-- Up to 2 typos OK for words 5+ chars
-
-Reply ONLY: CORRECT or WRONG`;
-  try{
-    const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:10,messages:[{role:'user',content:prompt}]})});
-    return (await res.json()).content.map(c=>c.text||'').join('').trim().toUpperCase().includes('CORRECT');
-  }catch{return localJudge(userAnswer,wordEntry,isEnToKo);}
-}
 
 function norm(s){
   return s.trim().toLowerCase()
-    .replace(/[()（）【】「」]/g,'').replace(/[~∼〜]/g,'')
-    .replace(/[,，、.·\/]/g,' ')
-    .replace(/\s*(은|는|이|가|을|를|의|에|도|로|으로|과|와|하다)\s*$/,'')
-    .replace(/\s+/g,'').trim();
+    .replace(/[()（）【】「」『』]/g,'')          // 괄호 제거
+    .replace(/[~∼〜～]/g,'')                     // 틸데 제거
+    .replace(/[-·•]/g,' ')                       // 구분자 → 공백
+    .replace(/[,，、.\/]/g,' ')                  // 쉼표·슬래시 → 공백
+    .replace(/에\s*대한|에\s*관한|에\s*대해|에\s*관해/g,'') // ~에 대한/관한
+    .replace(/하다$/,'')                         // 동사형 어미
+    .replace(/(은|는|이|가|을|를|의|에|도|로|으로|과|와|한|적|인)$/,'') // 조사/접미
+    .replace(/\s+/g,'')                          // 공백 전부 제거 후 비교
+    .trim();
 }
-function localJudge(user,wordEntry,isEnToKo){
-  const u=norm(user);
+
+function localJudge(user, wordEntry, isEnToKo){
+  const u = norm(user);
+  if(!u) return false;
+
   if(isEnToKo){
-    const v=[];
+    const variants = new Set();
     (wordEntry.senses||[]).forEach(s=>{
-      v.push(norm(s.mean));
-      v.push(norm(s.mean.replace(/\(([^)]+)\)/g,'$1')));
-      v.push(norm(s.mean.replace(/\([^)]+\)/g,'')));
-      s.mean.split(/[,，、\/]+/).forEach(p=>v.push(norm(p)));
+      const raw = s.mean;
+      variants.add(norm(raw));
+      // (운동)선수 → 운동선수
+      variants.add(norm(raw.replace(/\(([^)]+)\)/g,'$1')));
+      // (운동)선수 → 선수
+      variants.add(norm(raw.replace(/\([^)]+\)/g,'')));
+      // 쉼표/슬래시 분리
+      raw.split(/[,，、\/]+/).forEach(p=>variants.add(norm(p)));
+      // 괄호 안 내용만
+      const inner=raw.match(/\(([^)]+)\)/g);
+      if(inner) inner.forEach(m=>variants.add(norm(m)));
     });
-    return [...new Set(v)].filter(a=>a.length>0).some(a=>a===u||(a.length>1&&(a.includes(u)||u.includes(a))));
+
+    const arr=[...variants].filter(a=>a.length>0);
+    // 1) 완전 일치
+    if(arr.some(a=>a===u)) return true;
+    // 2) 한쪽이 다른쪽을 포함 (2글자 이상)
+    if(arr.some(a=>a.length>=2&&(a.includes(u)||u.includes(a)))) return true;
+    return false;
+
+  }else{
+    // 영어: 공백·대소문자 무시 후 레벤슈타인
+    const t = wordEntry.word.trim().toLowerCase().replace(/\s+/g,'');
+    const uEn = user.trim().toLowerCase().replace(/\s+/g,'');
+    if(t===uEn) return true;
+    const maxErr = t.length<=4?0:t.length<=7?1:2;
+    return lev(uEn,t)<=maxErr;
   }
-  const t=norm(wordEntry.word);
-  return t===u||lev(u,t)<=Math.min(2,Math.floor(wordEntry.word.length/5));
 }
 function lev(a,b){
   const m=a.length,n=b.length,dp=Array.from({length:m+1},(_,i)=>Array.from({length:n+1},(_,j)=>i?j?0:i:j));
@@ -582,19 +633,15 @@ function buildReveal(ok,typed,wordEntry,isEnToKo){
   }
 }
 
-async function checkAns(){
+function checkAns(){
   if(waiting){qi++;nextQ();return;}
   const inp=document.getElementById('qInput');
   if(!inp.value.trim())return;
   const typed=inp.value;
   inp.disabled=true;
-  document.getElementById('judging').classList.add('show');
-  document.getElementById('btnCheck').disabled=true;
 
-  const ok=await aiJudge(typed,cur,enToKo);
+  const ok=localJudge(typed,cur,enToKo);
 
-  document.getElementById('judging').classList.remove('show');
-  document.getElementById('btnCheck').disabled=false;
   inp.className='q-input '+(ok?'ok':'ng');
   document.getElementById('qCard').classList.add(ok?'ok':'ng');
 
@@ -653,6 +700,7 @@ function toast(msg,type='ok'){
 }
 
 refreshBadge();
+if(!getApiKey()) document.getElementById('tabCfg').style.color='var(--gold)';
 </script>
 </body>
 </html>
